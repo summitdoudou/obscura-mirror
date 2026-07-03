@@ -1,0 +1,47 @@
+name: Check Upstream Releases
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # 每天 UTC 2:00（北京时间 10:00）
+  workflow_dispatch:  # 可手动触发
+
+jobs:
+  check-release:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get latest upstream release
+        id: upstream
+        run: |
+          RELEASE=$(curl -sL https://api.github.com/repos/h4ckf0r0day/obscura/releases/latest)
+          TAG=$(echo "$RELEASE" | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])")
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Check local recorded version
+        id: local
+        run: |
+          CURRENT="v0.1.9"
+          echo "version=$CURRENT" >> $GITHUB_OUTPUT
+
+      - name: Create issue if new version found
+        if: steps.upstream.outputs.tag != steps.local.outputs.version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_TAG: ${{ steps.upstream.outputs.tag }}
+          CURRENT_TAG: ${{ steps.local.outputs.version }}
+        run: |
+          gh issue create \
+            --title "🚀 新版本 $NEW_TAG 发布" \
+            --body "上游发布了新版本 **$NEW_TAG**（当前跟踪版本：$CURRENT_TAG）。
+
+查看详情：https://github.com/h4ckf0r0day/obscura/releases/tag/$NEW_TAG
+
+请检查：
+- [ ] ARM64 兼容性
+- [ ] Hermes gateway 集成测试
+- [ ] 更新 RELEASES.md
+- [ ] 更新本地部署版本"
